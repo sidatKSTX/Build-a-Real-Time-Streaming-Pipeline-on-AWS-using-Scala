@@ -1,0 +1,210 @@
+# Use an existing VPC and Subnet
+data "aws_vpc" "existing_vpc" {
+  id = "vpc-0e0ba36fd1cca5339"
+}
+
+data "aws_subnet" "existing_subnet" {
+  id = "subnet-0f4a4d8d3114c29d4"
+}
+
+# ---------------------------------------
+# IAM Role for EMR EC2 Instances
+# ---------------------------------------
+resource "aws_iam_role" "emr_ec2_role" {
+  name = "EMR_EC2_Role"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "ec2.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+}
+
+# Attach necessary IAM policies to the EC2 role
+resource "aws_iam_role_policy_attachment" "s3_full_access" {
+  role       = aws_iam_role.emr_ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "ec2_full_access" {
+  role       = aws_iam_role.emr_ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2FullAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "kinesis_full_access" {
+  role       = aws_iam_role.emr_ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonKinesisFullAccess"
+}
+
+resource "aws_iam_instance_profile" "emr_ec2_profile" {
+  name = "EMR_EC2_Instance_Profile"
+  role = aws_iam_role.emr_ec2_role.name
+}
+
+# ---------------------------------------
+# IAM Role for EMR Service
+# ---------------------------------------
+resource "aws_iam_role" "emr_service_role" {
+  name = "EMR_Default_Role"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "elasticmapreduce.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+}
+
+# Attach necessary EMR Service policies
+resource "aws_iam_role_policy_attachment" "emr_service_policy" {
+  role       = aws_iam_role.emr_service_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEMRServicePolicy_v2"
+}
+
+resource "aws_iam_role_policy_attachment" "emr_role_attachment" {
+  role       = aws_iam_role.emr_service_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceRole"
+}
+
+# Custom inline policy to allow security group modifications
+resource "aws_iam_policy" "emr_security_group_policy" {
+  name        = "EMR_SecurityGroupPolicy"
+  description = "Allows EMR to modify security groups"
+
+  policy = jsonencode({
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": [
+          "ec2:AuthorizeSecurityGroupIngress",
+          "ec2:AuthorizeSecurityGroupEgress",
+          "ec2:RevokeSecurityGroupIngress",
+          "ec2:RevokeSecurityGroupEgress",
+          "ec2:DescribeSecurityGroups",
+          "ec2:ModifyInstanceAttribute"
+        ],
+        "Resource": "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "emr_security_group_attachment" {
+  role       = aws_iam_role.emr_service_role.name
+  policy_arn = aws_iam_policy.emr_security_group_policy.arn
+}
+
+# ---------------------------------------
+# Security Groups
+# ---------------------------------------
+resource "aws_security_group" "emr_master_sg" {
+  name        = "emr_master_security_group"
+  description = "Security Group for EMR Master Node"
+  vpc_id      = data.aws_vpc.existing_vpc.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    self        = true
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "emr_core_sg" {
+  name        = "emr_core_security_group"
+  description = "Security Group for EMR Core Nodes"
+  vpc_id      = data.aws_vpc.existing_vpc.id
+
+  ingress {
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    self        = true
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# ---------------------------------------
+# EMR Cluster Configuration
+# ---------------------------------------
+resource "aws_emr_cluster" "my_cluster" {
+  name                    = "MyCluster"
+  release_label           = "emr-6.5.0"
+  applications            = ["Hadoop", "Spark"]
+  service_role            = aws_iam_role.emr_service_role.arn
+  step_concurrency_level  = 1
+  unhealthy_node_replacement = true
+
+  master_instance_group {
+    instance_type  = "m5.xlarge"
+    instance_count = 1
+  }
+
+  core_instance_group {
+    instance_type  = "m5.xlarge"
+    instance_count = 1
+  }
+
+  ec2_attributes {
+    key_name                          = "pro"
+    instance_profile                  = aws_iam_instance_profile.emr_ec2_profile.arn
+    emr_managed_master_security_group = aws_security_group.emr_master_sg.id
+    emr_managed_slave_security_group  = aws_security_group.emr_core_sg.id
+    subnet_id                         = data.aws_subnet.existing_subnet.id
+  }
+
+  depends_on = [
+    aws_iam_role.emr_ec2_role,
+    aws_iam_role.emr_service_role,
+    aws_security_group.emr_master_sg,
+    aws_security_group.emr_core_sg
+  ]
+}
+
+# ---------------------------------------
+# Task Instance Group
+# ---------------------------------------
+resource "aws_emr_instance_group" "task_group" {
+  cluster_id     = aws_emr_cluster.my_cluster.id
+  instance_type  = "m5.xlarge"
+  instance_count = 1
+  name           = "TaskNodes"
+}
