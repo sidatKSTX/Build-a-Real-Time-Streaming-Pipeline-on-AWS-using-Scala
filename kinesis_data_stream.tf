@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/aws"
       version = ">= 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.0"
+    }
   }
 }
 
@@ -12,7 +16,7 @@ provider "aws" {
 }
 
 resource "aws_kinesis_stream" "my_stream" {
-  name             = "myInputStream"
+  name             = "myInputStream-${random_string.postfix.result}"
   shard_count      = 1
   stream_mode_details {
     stream_mode = "PROVISIONED"

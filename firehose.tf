@@ -1,7 +1,7 @@
 # 🔹 Firehose Delivery Stream Using Kinesis Data Stream
 resource "aws_kinesis_firehose_delivery_stream" "myDeliveryStream" {
   depends_on  = [aws_opensearch_domain.my_opensearch, aws_kinesis_stream.my_stream]
-  name        = "myDeliveryStream"
+  name        = "myDeliveryStream-${random_string.postfix.result}"
   destination = "opensearch"
 
   kinesis_source_configuration {
@@ -37,7 +37,7 @@ resource "aws_kinesis_firehose_delivery_stream" "myDeliveryStream" {
 
 # 🔹 IAM Role for Firehose to Read from Kinesis
 resource "aws_iam_role" "firehose_role" {
-  name = "firehose_delivery_role"
+  name = "firehose-delivery-role-${random_string.postfix.result}"
 
   assume_role_policy = <<EOF
 {
@@ -68,7 +68,7 @@ resource "aws_iam_role_policy_attachment" "firehose_s3" {
 
 # 🔹 Additional Permissions for Firehose to Read from Kinesis
 resource "aws_iam_role_policy" "firehose_kinesis_policy" {
-  name   = "firehose_kinesis_access"
+  name   = "firehose-kinesis-access-${random_string.postfix.result}"
   role   = aws_iam_role.firehose_role.id
 
   policy = <<EOF
@@ -92,19 +92,21 @@ EOF
 
 # 🔹 Create CloudWatch Log Group for Firehose
 resource "aws_cloudwatch_log_group" "firehose_log_group" {
-  name = "/aws/firehose/myDeliveryStream"
+  name = "/aws/firehose/myDeliveryStream-${random_string.postfix.result}"
   retention_in_days = 7  # 🔹 Keep logs for 7 days
 }
 
 # 🔹 Create CloudWatch Log Stream for Firehose
 resource "aws_cloudwatch_log_stream" "firehose_log_stream" {
-  name           = "firehose-error-logs"
+  name           = "DestinationDelivery"
   log_group_name = aws_cloudwatch_log_group.firehose_log_group.name
 }
 
+
+
 # 🔹 IAM Policy for Firehose to Write Logs to CloudWatch
 resource "aws_iam_role_policy" "firehose_cloudwatch_policy" {
-  name   = "firehose_cloudwatch_access"
+  name   = "firehose-cloudwatch-access-${random_string.postfix.result}"
   role   = aws_iam_role.firehose_role.id
 
   policy = <<EOF
@@ -116,7 +118,9 @@ resource "aws_iam_role_policy" "firehose_cloudwatch_policy" {
       "Action": [
         "logs:PutLogEvents",
         "logs:CreateLogStream",
-        "logs:DescribeLogStreams"
+        "logs:CreateLogGroup",
+        "logs:DescribeLogStreams",
+        "logs:DescribeLogGroups"
       ],
       "Resource": "${aws_cloudwatch_log_group.firehose_log_group.arn}"
     }

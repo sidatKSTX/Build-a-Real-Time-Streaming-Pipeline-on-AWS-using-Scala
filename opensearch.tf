@@ -1,5 +1,5 @@
 resource "aws_opensearch_domain" "my_opensearch" {
-  domain_name    = "myopensearch"
+  domain_name    = "myopensearch-${random_string.postfix.result}"
   engine_version = "OpenSearch_1.3"
 
   cluster_config {
@@ -46,7 +46,7 @@ resource "aws_opensearch_domain" "my_opensearch" {
         "es:*",
         "indices:*"
       ],
-      "Resource": "arn:aws:es:us-east-1:818140567777:domain/myopensearch/*"
+      "Resource": "arn:aws:es:us-east-1:818140567777:domain/myopensearch-${random_string.postfix.result}/*"
     }
   ]
 }
