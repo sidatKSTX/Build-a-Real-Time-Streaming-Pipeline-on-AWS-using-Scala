@@ -122,7 +122,7 @@ resource "aws_iam_role_policy" "firehose_cloudwatch_policy" {
         "logs:DescribeLogStreams",
         "logs:DescribeLogGroups"
       ],
-      "Resource": "${aws_cloudwatch_log_group.firehose_log_group.arn}"
+      "Resource": "arn:aws:logs:${local.region}:${local.account_id}:log-group:/aws/firehose/myDeliveryStream-${random_string.postfix.result}:*"
     }
   ]
 }

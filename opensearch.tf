@@ -41,12 +41,11 @@ resource "aws_opensearch_domain" "my_opensearch" {
   "Statement": [
     {
       "Effect": "Allow",
-      "Principal": "*",
-      "Action": [
-        "es:*",
-        "indices:*"
-      ],
-      "Resource": "arn:aws:es:us-east-1:818140567777:domain/myopensearch-${random_string.postfix.result}/*"
+      "Principal": {
+        "AWS": "*"
+      },
+      "Action": "es:*",
+      "Resource": "arn:aws:es:${local.region}:${local.account_id}:domain/myopensearch-${random_string.postfix.result}/*"
     }
   ]
 }

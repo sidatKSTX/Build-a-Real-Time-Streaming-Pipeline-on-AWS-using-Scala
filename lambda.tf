@@ -33,7 +33,7 @@ resource "aws_iam_policy" "lambda_policy" {
         "logs:CreateLogStream",
         "logs:PutLogEvents"
       ],
-      "Resource": "arn:aws:logs:*:*:*"
+      "Resource": "arn:aws:logs:${local.region}:${local.account_id}:*"
     },
     {
       "Effect": "Allow",
@@ -71,7 +71,7 @@ resource "aws_lambda_function" "s3_trigger_lambda" {
   environment {
     variables = {
       KINESIS_STREAM_NAME = aws_kinesis_stream.my_stream.name
-      REGION              = "us-east-1"
+      REGION              = local.region
     }
   }
 }
